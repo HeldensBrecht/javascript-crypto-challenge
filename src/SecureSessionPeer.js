@@ -1,33 +1,32 @@
 const libsodium = require('libsodium-wrappers');
+const Decryptor = require('./Decryptor')
+const Encryptor = require('./Encryptor')
 
 module.exports = async (oPeer) => {
     await libsodium.ready;
     let pair = libsodium.crypto_kx_keypair();
     let otherPeer = oPeer;
-    let sharedKeyR = undefined;
-    let sharedKeyT = undefined;
+    let sharedKeyR, sharedKeyT, decryptor, encryptor = undefined;
     let messages = [];
 
     let obj = {
         publicKey: pair.publicKey,
-        generateSharedKeys: (oPeer) => {
+        generateSharedKeys: async (oPeer) => {
             otherPeer = oPeer;
             let keys = libsodium.crypto_kx_client_session_keys(pair.publicKey, pair.privateKey, oPeer.publicKey);
             sharedKeyR = keys.sharedRx;
             sharedKeyT = keys.sharedTx;
+            decryptor = await Decryptor(sharedKeyR);
+            encryptor = await Encryptor(sharedKeyT);
         },
         receiveMessage: (message) => {
             messages.push(message);
         },
         encrypt: (msg) => {
-            let nonce = libsodium.randombytes_buf(libsodium.crypto_secretbox_NONCEBYTES);
-            return {
-                nonce: nonce,
-                ciphertext: libsodium.crypto_secretbox_easy(msg, nonce, sharedKeyT)
-            }
+            return encryptor.encrypt(msg);
         },
         decrypt: (ciphertext, nonce) => {
-            return libsodium.crypto_secretbox_open_easy(ciphertext, nonce, sharedKeyR);
+            return decryptor.decrypt(ciphertext, nonce);
         },
         send: (msg) => {
             otherPeer.receiveMessage(obj.encrypt(msg));
@@ -45,6 +44,8 @@ module.exports = async (oPeer) => {
         sharedKeyR = keys.sharedRx;
         sharedKeyT = keys.sharedTx;
         otherPeer.generateSharedKeys(obj);
+        decryptor = await Decryptor(sharedKeyR);
+        encryptor = await Encryptor(sharedKeyT);
     }
 
     return obj;
