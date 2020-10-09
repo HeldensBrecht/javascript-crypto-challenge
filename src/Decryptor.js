@@ -4,6 +4,7 @@ module.exports = async (key) => {
     if (key === undefined) {
         throw 'no key';
     }
+    await libsodium.ready;
     return {
         key: key,
         decrypt: (ciphertext, nonce) => {
